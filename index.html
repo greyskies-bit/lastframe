@@ -3,93 +3,58 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>最終フレーム抽出器 v2</title>
+    <title>オート・ラストフレーム</title>
     <style>
-        :root {
-            --primary-color: #007AFF;
-            --bg-color: #f2f2f7;
-            --card-bg: #ffffff;
-        }
         body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            background-color: var(--bg-color);
+            font-family: -apple-system, sans-serif;
+            background-color: #000; /* 画像が見やすいよう黒背景 */
+            color: #fff;
             margin: 0;
             display: flex;
             flex-direction: column;
             align-items: center;
-            color: #1c1c1e;
+            justify-content: center;
+            min-height: 100vh;
         }
-        .container {
-            width: 90%;
-            max-width: 500px;
-            margin-top: 40px;
-            padding: 20px;
-            background: var(--card-bg);
-            border-radius: 20px;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        .ui-layer {
+            position: fixed;
+            top: 20px;
+            z-index: 10;
             text-align: center;
+            width: 100%;
         }
-        h1 { font-size: 1.2rem; margin-bottom: 20px; }
-        
         .custom-file-upload {
-            display: inline-block;
-            padding: 12px 24px;
-            background-color: var(--primary-color);
+            padding: 15px 30px;
+            background: #007AFF;
             color: white;
-            border-radius: 12px;
-            font-weight: 600;
+            border-radius: 25px;
+            font-weight: bold;
             cursor: pointer;
-            margin-bottom: 20px;
+            box-shadow: 0 4px 15px rgba(0,122,255,0.5);
         }
         input[type="file"] { display: none; }
-
+        
         #status {
+            margin-top: 15px;
             font-size: 0.9rem;
-            color: #8e8e93;
-            margin: 15px 0;
-            line-height: 1.4;
-        }
-
-        #resultArea {
-            margin-top: 20px;
-            display: none;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.8);
         }
 
         #previewImage {
-            width: 100%;
-            border-radius: 10px;
-            border: 1px solid #d1d1d6;
-            margin-bottom: 20px;
+            max-width: 100%;
+            max-height: 100vh;
+            display: none;
+            /* 抽出後、自動的に全画面っぽく表示 */
         }
 
-        .save-info {
-            font-size: 0.85rem;
-            color: #ff3b30;
-            background: #fff2f2;
-            padding: 10px;
-            border-radius: 8px;
-            margin-bottom: 15px;
-        }
-
-        .btn-download {
-            display: block;
-            width: 100%;
-            padding: 15px;
-            background-color: #34c759;
-            color: white;
-            text-decoration: none;
-            border-radius: 12px;
-            font-weight: bold;
-            box-sizing: border-box;
-        }
-
+        /* 読み込み中アニメーション */
         .loader {
             display: none;
-            border: 4px solid #f3f3f3;
-            border-top: 4px solid var(--primary-color);
+            width: 40px;
+            height: 40px;
+            border: 4px solid #333;
+            border-top: 4px solid #007AFF;
             border-radius: 50%;
-            width: 30px;
-            height: 30px;
             animation: spin 1s linear infinite;
             margin: 20px auto;
         }
@@ -98,25 +63,16 @@
 </head>
 <body>
 
-<div class="container">
-    <h1>動画の最終フレームを保存</h1>
-    
+<div class="ui-layer" id="uiLayer">
     <label class="custom-file-upload">
         <input type="file" id="videoInput" accept="video/*">
-        動画を選択する
+        動画を選択
     </label>
-    
     <div id="loader" class="loader"></div>
-    <div id="status">動画を選択してください</div>
-
-    <div id="resultArea">
-        <div class="save-info">
-            画像を<b>長押し</b>して「"写真"に保存」を選択してください。
-        </div>
-        <img id="previewImage">
-        <a id="downloadLink" class="btn-download">画像を保存 (ブラウザ経由)</a>
-    </div>
+    <div id="status">選択すると自動で解析・表示します</div>
 </div>
+
+<img id="previewImage">
 
 <video id="hiddenVideo" style="display:none;" playsinline muted></video>
 <canvas id="hiddenCanvas" style="display:none;"></canvas>
@@ -126,75 +82,51 @@
     const video = document.getElementById('hiddenVideo');
     const canvas = document.getElementById('hiddenCanvas');
     const previewImage = document.getElementById('previewImage');
-    const resultArea = document.getElementById('resultArea');
     const status = document.getElementById('status');
     const loader = document.getElementById('loader');
-    const downloadLink = document.getElementById('downloadLink');
-
-    let timeoutCheck;
+    const uiLayer = document.getElementById('uiLayer');
 
     videoInput.addEventListener('change', function(e) {
         const file = e.target.files[0];
         if (!file) return;
 
-        // 初期化
-        resultArea.style.display = 'none';
+        // 画面をリセットして読み込み開始
+        previewImage.style.display = 'none';
         loader.style.display = 'block';
-        status.textContent = '動画を読み込んでいます...';
-
-        // 15秒でタイムアウト設定
-        clearTimeout(timeoutCheck);
-        timeoutCheck = setTimeout(() => {
-            if (loader.style.display === 'block') {
-                loader.style.display = 'none';
-                status.textContent = 'エラー：読み込みに時間がかかりすぎています。動画が長すぎるか、形式に対応していない可能性があります。';
-            }
-        }, 15000);
+        status.textContent = '解析中...';
 
         const url = URL.createObjectURL(file);
         video.src = url;
-        video.load(); // iPhone向けに明示的にロード
+        video.load();
     });
 
-    // メタデータが読み込まれたら
     video.onloadedmetadata = function() {
-        status.textContent = '最終フレームを解析中...';
-        // 最終秒にシーク。iPhoneは少し手前(0.1秒)が安定する
-        if (video.duration > 0) {
-            video.currentTime = video.duration - 0.1;
-        } else {
-            video.currentTime = 0;
-        }
+        // 最終フレームへジャンプ
+        video.currentTime = Math.max(0, video.duration - 0.1);
     };
 
-    // シーク（移動）が完了したら
     video.onseeked = function() {
-        try {
-            canvas.width = video.videoWidth;
-            canvas.height = video.videoHeight;
-            
-            const ctx = canvas.getContext('2d');
-            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-            
-            // 画質重視でJPEG変換
-            const dataUrl = canvas.toDataURL('image/jpeg', 0.95);
-            previewImage.src = dataUrl;
-            downloadLink.href = dataUrl;
-            downloadLink.download = "last_frame.jpg";
-
-            loader.style.display = 'none';
-            resultArea.style.display = 'block';
-            status.textContent = '抽出完了！';
-            clearTimeout(timeoutCheck);
-        } catch (e) {
-            status.textContent = 'エラー：フレームの書き出しに失敗しました。';
-            loader.style.display = 'none';
-        }
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        
+        // 画像生成
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.95);
+        previewImage.src = dataUrl;
+        
+        // 自動で結果を表示
+        loader.style.display = 'none';
+        previewImage.style.display = 'block';
+        status.textContent = '完了！画像を長押しして保存してください';
+        
+        // UIを少し透明にして画像を見やすくする
+        uiLayer.style.opacity = "0.5";
     };
 
     video.onerror = function() {
         loader.style.display = 'none';
-        status.textContent = 'エラー：この動画ファイルは読み込めません。';
+        status.textContent = 'エラー：動画を読み込めませんでした';
     };
 </script>
 
