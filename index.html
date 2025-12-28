@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Video Last Frame Extractor</title>
+    <style>
+        body { font-family: sans-serif; text-align: center; padding: 20px; }
+        #preview { max-width: 100%; margin-top: 20px; border: 1px solid #ccc; }
+        .hidden { display: none; }
+        button { padding: 10px 20px; font-size: 16px; background: #007bff; color: white; border: none; border-radius: 5px; }
+    </style>
+</head>
+<body>
+
+    <h2>動画の最終フレームを抽出</h2>
+    
+    <input type="file" id="videoInput" accept="video/*">
+    <br><br>
+    
+    <div id="resultArea" class="hidden">
+        <p>抽出された最終フレーム:</p>
+        <img id="preview" alt="Final Frame">
+        <br><br>
+        <button id="downloadBtn">画像を保存する</button>
+    </div>
+
+    <video id="tempVideo" class="hidden" playsinline muted></video>
+    <canvas id="tempCanvas" class="hidden"></canvas>
+
+    <script>
+        const videoInput = document.getElementById('videoInput');
+        const tempVideo = document.getElementById('tempVideo');
+        const tempCanvas = document.getElementById('tempCanvas');
+        const preview = document.getElementById('preview');
+        const resultArea = document.getElementById('resultArea');
+        const downloadBtn = document.getElementById('downloadBtn');
+
+        videoInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const url = URL.createObjectURL(file);
+            tempVideo.src = url;
+            tempVideo.load();
+        });
+
+        // 動画のメタデータが読み込まれたら
+        tempVideo.addEventListener('loadedmetadata', () => {
+            // 最終フレームへシーク（微調整のため0.1秒引くのがコツ）
+            tempVideo.currentTime = tempVideo.duration - 0.1;
+        });
+
+        // シークが完了したら描画
+        tempVideo.addEventListener('seeked', () => {
+            const ctx = tempCanvas.getContext('2d');
+            tempCanvas.width = tempVideo.videoWidth;
+            tempCanvas.height = tempVideo.videoHeight;
+            
+            // Canvasに動画の現在のフレームを描画
+            ctx.drawImage(tempVideo, 0, 0, tempCanvas.width, tempCanvas.height);
+            
+            // 画像として書き出し
+            const dataUrl = tempCanvas.toDataURL('image/png');
+            preview.src = dataUrl;
+            resultArea.classList.remove('hidden');
+        });
+
+        // 保存ボタン（長押し保存を促すか、リンクでダウンロード）
+        downloadBtn.addEventListener('click', () => {
+            const link = document.createElement('a');
+            link.href = preview.src;
+            link.download = 'last_frame.png';
+            link.click();
+            alert('iPhoneの場合、画像を長押しして「"写真"に保存」を選択してください。');
+        });
+    </script>
+</body>
+</html>
